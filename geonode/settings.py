@@ -517,6 +517,7 @@ INSTALLED_APPS = (
     'allauth.socialaccount',
 
     # GeoNode
+    'rndt',
     'geonode',
 )
 
@@ -710,7 +711,7 @@ TEMPLATES = [
     {
         'NAME': 'GeoNode Project Templates',
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [os.path.join(PROJECT_ROOT, "templates")],
+        'DIRS': [],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -725,7 +726,8 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'geonode.context_processors.resource_urls',
                 'geonode.geoserver.context_processors.geoserver_urls',
-                'geonode.themes.context_processors.custom_theme'
+                'geonode.themes.context_processors.custom_theme',
+                'rndt.context_processors.rndt_tags'
             ],
             # Either remove APP_DIRS or remove the 'loaders' option.
             # 'loaders': [
@@ -1072,12 +1074,20 @@ CATALOGUE = {
         'ENGINE': 'geonode.catalogue.backends.pycsw_local',
         # pycsw in non-local mode
         # 'ENGINE': 'geonode.catalogue.backends.pycsw_http',
+        # GeoNetwork opensource
+        # 'ENGINE': 'geonode.catalogue.backends.geonetwork',
         # deegree and others
         # 'ENGINE': 'geonode.catalogue.backends.generic',
+
         # The FULLY QUALIFIED base url to the CSW instance for this GeoNode
         'URL': urljoin(SITEURL, '/catalogue/csw'),
         # 'URL': 'http://localhost:8080/geonetwork/srv/en/csw',
         # 'URL': 'http://localhost:8080/deegree-csw-demo-3.0.4/services',
+
+        # login credentials (for GeoNetwork)
+        # 'USER': 'admin',
+        # 'PASSWORD': 'admin',
+
         # 'ALTERNATES_ONLY': True,
     }
 }
