@@ -517,7 +517,6 @@ INSTALLED_APPS = (
     'allauth.socialaccount',
 
     # GeoNode
-    'rndt',
     'geonode',
 )
 
@@ -711,7 +710,7 @@ TEMPLATES = [
     {
         'NAME': 'GeoNode Project Templates',
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [os.path.join(PROJECT_ROOT, "templates")],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -726,8 +725,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'geonode.context_processors.resource_urls',
                 'geonode.geoserver.context_processors.geoserver_urls',
-                'geonode.themes.context_processors.custom_theme',
-                'rndt.context_processors.rndt_tags'
+                'geonode.themes.context_processors.custom_theme'
             ],
             # Either remove APP_DIRS or remove the 'loaders' option.
             # 'loaders': [
