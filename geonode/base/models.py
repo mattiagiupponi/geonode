@@ -456,6 +456,12 @@ class Thesaurus(models.Model):
     """
     Loadable thesaurus containing keywords in different languages
     """
+    id = models.AutoField(
+        null=False,
+        blank=False,
+        unique=True,
+        primary_key=True)
+
     identifier = models.CharField(
         max_length=255,
         null=False,
@@ -912,9 +918,12 @@ class ResourceBase(PolymorphicModel, PermissionLevelMixin, ItemBase):
     def _remove_html_tags(self, attribute_str):
         try:
             pattern = re.compile('<.*?>')
-            return re.sub(pattern, '', attribute_str)
+            return re.sub(pattern, '', attribute_str).replace('\n', ' ').replace('\r', '').strip()
         except Exception:
-            return attribute_str
+            if attribute_str:
+                return attribute_str.replace('\n', ' ').replace('\r', '').strip()
+            else:
+                return attribute_str
 
     @property
     def raw_abstract(self):

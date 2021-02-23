@@ -885,8 +885,7 @@ class TestHtmlTagRemoval(SimpleTestCase):
     def test_complex_tags_in_attribute(self):
         tagged_value = """<p style="display:none;" id="test">This is not a templated text<p>
         <div class="test_css">Something in container</div>"""
-        attribute_target_value = """This is not a templated text
-        Something in container"""
+        attribute_target_value = """This is not a templated text         Something in container"""
         r = ResourceBase()
         filtered_value = r._remove_html_tags(tagged_value)
         self.assertEqual(filtered_value, attribute_target_value)
@@ -942,7 +941,12 @@ class TestTagThesaurus(TestCase):
         return Thesaurus.objects.all().order_by("-id")[0]
 
 
-class TestThesaurusAvailableForm(GeoNodeBaseTestSupport):
+@override_settings(THESAURUS_DEFAULT_LANG="en")
+class TestThesaurusAvailableForm(TestCase):
+    fixtures = [
+        "test_thesaurus.json"
+    ]
+
     def setUp(self):
         self.sut = ThesaurusAvailableForm
 
@@ -951,9 +955,9 @@ class TestThesaurusAvailableForm(GeoNodeBaseTestSupport):
         self.assertFalse(actual.is_valid())
 
     def test_form_is_invalid_if_fileds_send_unexpected_values(self):
-        actual = self.sut(data={"8": [1, 2], "6": 1234})
+        actual = self.sut(data={"1": [1, 2]})
         self.assertFalse(actual.is_valid())
 
     def test_form_is_valid_if_fileds_send_expected_values(self):
-        actual = self.sut(data={"8": [1, 2], "6": 36})
+        actual = self.sut(data={"1": 1})
         self.assertTrue(actual.is_valid())
