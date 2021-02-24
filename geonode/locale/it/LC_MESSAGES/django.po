@@ -8554,26 +8554,26 @@ msgstr "Livello di permessi non valido."
 msgid "Permission Denied"
 msgstr "Permesso negato"
 
-#~ msgid "Data Contraints"
-#~ msgstr "Vincoli sui dati"
+msgid "Data Contraints"
+msgstr "Vincoli sui dati"
 
-#~ msgid "Access constraints"
-#~ msgstr "Vincoli di accesso"
+msgid "Access constraints"
+msgstr "Vincoli di accesso"
 
-#~ msgid "Use constraints"
-#~ msgstr "Vincoli di fruibilità"
+msgid "Use constraints"
+msgstr "Vincoli di fruibilità"
 
-#~ msgid "Free text"
-#~ msgstr "Testo Libero"
+msgid "Free text"
+msgstr "Testo Libero"
 
-#~ msgid "Resolution"
-#~ msgstr "Risoluzione"
+msgid "Resolution"
+msgstr "Risoluzione"
 
-#~ msgid "Public Administration"
-#~ msgstr "Pubblica Amministrazione"
+msgid "Public Administration"
+msgstr "Pubblica Amministrazione"
 
-#~ msgid "Additional info"
-#~ msgstr "Informazioni aggiuntive"
+msgid "Additional info"
+msgstr "Informazioni aggiuntive"
 
 #~ msgid "Upload QML Style"
 #~ msgstr "Carica stile QML"
