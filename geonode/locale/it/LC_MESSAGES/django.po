@@ -8575,6 +8575,9 @@ msgstr "Pubblica Amministrazione"
 msgid "Additional info"
 msgstr "Informazioni aggiuntive"
 
+msgid "Positional Accuracy"
+msgstr "Accuratezza posizionale"
+
 #~ msgid "Upload QML Style"
 #~ msgstr "Carica stile QML"
 
