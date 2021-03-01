@@ -20,6 +20,7 @@
 
 import os
 import re
+import html
 import math
 import uuid
 import logging
@@ -916,14 +917,16 @@ class ResourceBase(PolymorphicModel, PermissionLevelMixin, ItemBase):
         return "{0}".format(self.title)
 
     def _remove_html_tags(self, attribute_str):
+        _attribute_str = attribute_str
         try:
             pattern = re.compile('<.*?>')
-            return re.sub(pattern, '', attribute_str).replace('\n', ' ').replace('\r', '').strip()
+            _attribute_str = html.unescape(
+                re.sub(pattern, '', attribute_str).replace('\n', ' ').replace('\r', '').strip())
         except Exception:
             if attribute_str:
-                return attribute_str.replace('\n', ' ').replace('\r', '').strip()
-            else:
-                return attribute_str
+                _attribute_str = html.unescape(
+                    attribute_str.replace('\n', ' ').replace('\r', '').strip())
+        return _attribute_str
 
     @property
     def raw_abstract(self):
@@ -1056,7 +1059,7 @@ class ResourceBase(PolymorphicModel, PermissionLevelMixin, ItemBase):
         if self.bbox_polygon:
             bbox = self.bbox_polygon
             match = re.match(r'^(EPSG:)?(?P<srid>\d{4,6})$', self.srid)
-            srid = int(match.group('srid'))
+            srid = int(match.group('srid')) if match else 4326
             if bbox.srid is not None and bbox.srid != srid:
                 try:
                     bbox = bbox.transform(srid, clone=True)
@@ -1276,8 +1279,8 @@ class ResourceBase(PolymorphicModel, PermissionLevelMixin, ItemBase):
         bbox_polygon = Polygon.from_bbox(bbox)
 
         try:
-            match = re.match(r'^(EPSG:)?(?P<srid>\d{4,5})$', str(srid))
-            bbox_polygon.srid = int(match.group('srid'))
+            match = re.match(r'^(EPSG:)?(?P<srid>\d{4,6})$', str(srid))
+            bbox_polygon.srid = int(match.group('srid')) if match else 4326
         except AttributeError:
             logger.warning("No srid found for layer %s bounding box", self)
 
