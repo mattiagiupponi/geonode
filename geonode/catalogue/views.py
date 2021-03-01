@@ -47,71 +47,36 @@ def csw_global_dispatch(request, layer_filter=None):
     if settings.CATALOGUE['default']['ENGINE'] != 'geonode.catalogue.backends.pycsw_local':
         return HttpResponseRedirect(settings.CATALOGUE['default']['URL'])
 
-    dispatcher = CswGlobalDispatcher(request)
+    mdict = dict(settings.PYCSW['CONFIGURATION'], **CONFIGURATION)
 
-    mdict = dispatcher.get_configurations()
-    env = dispatcher.define_env_data()
+    access_token = None
+    if request and request.user:
+        access_token = get_or_create_token(request.user)
+        if access_token and access_token.is_expired():
+            access_token = None
+
+    absolute_uri = ('%s' % request.build_absolute_uri())
+    query_string = ('%s' % request.META['QUERY_STRING'])
+    env = request.META.copy()
+
+    if access_token and not access_token.is_expired():
+        env.update({'access_token': access_token.token})
+        if 'access_token' not in query_string:
+            absolute_uri = ('%s&access_token=%s' % (absolute_uri, access_token.token))
+            query_string = ('%s&access_token=%s' % (query_string, access_token.token))
+
+    env.update({'local.app_root': os.path.dirname(__file__),
+                'REQUEST_URI': absolute_uri,
+                'QUERY_STRING': query_string})
 
     # Save original filter before doing anything
     mdict_filter = mdict['repository']['filter']
 
     try:
         # Filter out Layers not accessible to the User
-        mdict = dispatcher.get_authorized_layer_ids()
-
-        csw = server.Csw(mdict, env, version='2.0.2')
-
-        content = dispatcher.get_xml_tree(csw)
-    finally:
-        # Restore original filter before doing anything
-        mdict['repository']['filter'] = mdict_filter
-
-    return HttpResponse(content, content_type=csw.contenttype)
-
-
-class CswGlobalDispatcher():
-    def __init__(self, request):
-        self.request = request
-        self.access_token = self.get_access_token()
-        self.env = self.request.META.copy()
-        self.mdict = self.get_configurations()
-
-    @staticmethod
-    def get_configurations():
-        return dict(settings.PYCSW['CONFIGURATION'], **CONFIGURATION)
-
-    def get_access_token(self):
-        if self.request and self.request.user:
-            self.access_token = get_or_create_token(self.request.user)
-            if self.access_token and self.access_token.is_expired():
-                self.access_token = None
-        return self.access_token
-
-    def define_env_data(self):
-        absolute_uri = self._get_absolute_uri()
-        query_string = self._get_query_string()
-
-        if self.access_token and not self.access_token.is_expired():
-            self.env.update({'access_token': self.access_token.token})
-            if 'access_token' not in query_string:
-                absolute_uri = ('%s&access_token=%s' % (absolute_uri, self.access_token.token))
-                query_string = ('%s&access_token=%s' % (query_string, self.access_token.token))
-
-        self.env.update({'local.app_root': os.path.dirname(__file__),
-                    'REQUEST_URI': absolute_uri,
-                    'QUERY_STRING': query_string})
-        return self.env
-
-    def _get_absolute_uri(self):
-        return ('%s' % self.request.build_absolute_uri())
-    def _get_query_string(self):
-        return ('%s' % self.request.META['QUERY_STRING'])
-
-    def get_authorized_layer_ids(self):
         authorized_ids = []
-        groups_ids = []
-        if self.request.user:
-            profiles = get_user_model().objects.filter(username=str(self.request.user))
+        if request.user:
+            profiles = get_user_model().objects.filter(username=str(request.user))
         else:
             profiles = get_user_model().objects.filter(username="AnonymousUser")
         if profiles:
@@ -133,31 +98,31 @@ class CswGlobalDispatcher():
             authorized_layers = "(" + (", ".join(str(e)
                                                  for e in authorized_ids)) + ")"
             authorized_layers_filter = "id IN " + authorized_layers
-            self.mdict['repository']['filter'] += " AND " + authorized_layers_filter
-            if self.request.user and self.request.user.is_authenticated:
-                self.mdict['repository']['filter'] = "({}) OR ({})".format(self.mdict['repository']['filter'],
+            mdict['repository']['filter'] += " AND " + authorized_layers_filter
+            if request.user and request.user.is_authenticated:
+                mdict['repository']['filter'] = "({}) OR ({})".format(mdict['repository']['filter'],
                                                                       authorized_layers_filter)
         else:
             authorized_layers_filter = "id = -9999"
-            self.mdict['repository']['filter'] += " AND " + authorized_layers_filter
+            mdict['repository']['filter'] += " AND " + authorized_layers_filter
 
         # Filter out Documents and Maps
         if 'ALTERNATES_ONLY' in settings.CATALOGUE['default'] and settings.CATALOGUE['default']['ALTERNATES_ONLY']:
-            self.mdict['repository']['filter'] += " AND alternate IS NOT NULL"
+            mdict['repository']['filter'] += " AND alternate IS NOT NULL"
 
         # Filter out Layers belonging to specific Groups
         is_admin = False
-        if self.request.user:
-            is_admin = self.request.user.is_superuser if self.request.user else False
+        if request.user:
+            is_admin = request.user.is_superuser if request.user else False
 
         if not is_admin and settings.GROUP_PRIVATE_RESOURCES:
             groups_ids = []
-            if self.request.user and self.request.user.is_authenticated:
-                for group in self.request.user.groups.all():
+            if request.user and request.user.is_authenticated:
+                for group in request.user.groups.all():
                     groups_ids.append(group.id)
                 group_list_all = []
                 try:
-                    group_list_all = self.request.user.group_list_all().values('group')
+                    group_list_all = request.user.group_list_all().values('group')
                 except Exception:
                     pass
                 for group in group_list_all:
@@ -175,16 +140,17 @@ class CswGlobalDispatcher():
                         groups_ids.append(group['group'])
                 else:
                     groups_ids.append(group.id)
+
             if len(groups_ids) > 0:
                 groups = "(" + (", ".join(str(e) for e in groups_ids)) + ")"
                 groups_filter = "(group_id IS NULL OR group_id IN " + groups + ")"
-                self.mdict['repository']['filter'] += " AND " + groups_filter
+                mdict['repository']['filter'] += " AND " + groups_filter
             else:
                 groups_filter = "group_id IS NULL"
-                self.mdict['repository']['filter'] += " AND " + groups_filter
-        return self.mdict
+                mdict['repository']['filter'] += " AND " + groups_filter
 
-    def get_xml_tree(self, csw):
+        csw = server.Csw(mdict, env, version='2.0.2')
+
         content = csw.dispatch_wsgi()
 
         # pycsw 2.0 has an API break:
@@ -210,7 +176,7 @@ class CswGlobalDispatcher():
         for prefix, uri in spaces.items():
             ET.register_namespace(prefix, uri)
 
-        if self.access_token and not self.access_token.is_expired():
+        if access_token and not access_token.is_expired():
             tree = dlxml.fromstring(content)
             for online_resource in tree.findall(
                     '*//gmd:CI_OnlineResource', spaces):
@@ -222,11 +188,17 @@ class CswGlobalDispatcher():
                                 url.text += "?"
                             else:
                                 url.text += "&"
-                            url.text += ("access_token=%s" % (self.access_token.token))
+                            url.text += ("access_token=%s" % (access_token.token))
                             url.set('updated', 'yes')
                 except Exception:
                     pass
-            return ET.tostring(tree, encoding='utf8', method='xml')
+            content = ET.tostring(tree, encoding='utf8', method='xml')
+    finally:
+        # Restore original filter before doing anything
+        mdict['repository']['filter'] = mdict_filter
+
+    return HttpResponse(content, content_type=csw.contenttype)
+
 
 @csrf_exempt
 def opensearch_dispatch(request):
