@@ -199,8 +199,11 @@
     $(document).ready(function() {
         var prevNum = 0, totalNum = 0;
         var empty = 0;
+        {% block hints %}
+
         $('#completeness-hints .mandatory-hint').click(getTab.bind(null, 1));
         $('#completeness-hints .advanced-hint').click(getTab.bind(null, 2));
+        {% endblock hints %}
 
         // set proper classes to count empty fields and display them
         var setInputEmpty = function( target, empty ) {
@@ -217,7 +220,7 @@
             $(target).siblings('span').toggleClass('has-error', empty);
             $(target).toggleClass("input-empty", empty);
           }
-
+        {% block target %}
           if(target.id === 'category_form' ||
              target.id === 'id_resource-regions' ||
              target.id === 'id_resource-group'
@@ -233,6 +236,7 @@
               $(target).toggleClass("input-empty", empty);
           }
 
+        {% endblock target %}
           // bootstrap-select copies the select's classes, so it have to be removed
           if( $( '.bootstrap-select' ).hasClass("input-empty") ) {
             $( '.bootstrap-select' ).toggleClass("input-empty");
@@ -330,7 +334,7 @@
                 }
             }
         };
-
+        {% block trigger_onInputChange %}
         $('#category_form').change(onInputChange).change();
         $('#id_resource-group').change(onInputChange).change();
         document.querySelector('select[name="resource-keywords"]').onchange=onInputChange
@@ -365,6 +369,7 @@ $('#id_resource-temporal_extent_start').on('blur', function() {$(this).change(on
             }
         });
 
+        {% endblock trigger_onInputChange %}
         // Dataset attributes sorting
         $(document).ready(function() {
             //Helper function to keep table row from collapsing when being sorted
