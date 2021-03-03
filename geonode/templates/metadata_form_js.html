@@ -63,8 +63,9 @@
         animation: true,
         content: tooltipContent
       });
-
+    {% block completeness  %}
     var updateCompleteness = function(completeness) {
+        {% block extendcompleteness %}{% endblock extendcompleteness %}
       $('#profileCompleteness .progress-bar').html(parseFloat(((completeness)*100).toFixed(0)) + ' %').width(parseFloat(((completeness)*100).toFixed(2)) + '%');
       $('#profileCompleteness .completed').toggle(completeness === 1);
       $('#profileCompleteness .not-completed').toggle(completeness !== 1);
@@ -100,7 +101,6 @@
         .toggleClass('progress-bar-success', !advancedMissing)
         .attr('title', advancedMissing ? gettext("some schema mandatory fields are missing") : gettext("Metadata Schema mandatory fields completed") )
         .tooltip('fixTitle');
-
         //done button tooltip
         if(completeness === 1 && $('.metadata-edit-done').css('opacity')+"" === "0" && !tooltipShown && !gotIt) {
           tooltipShown = true;
@@ -118,6 +118,7 @@
         // show/hide done button
         $('.metadata-edit-done').animate(completeness === 1 ? {width: '100px', opacity: 1} : {width: 0, opacity: 0});
     }
+    {% endblock completeness  %}
 
     function getTab(number) {
       var activeTab = $("#edit-metadata .wizard--progress li.is-active");
@@ -298,10 +299,10 @@
                         el.type !== 'button');
             return is_mandatory;
         }
-
+        
+        {% block onInputChange %}
         var onInputChange = function(e){
             toggleRestrictionsConstraints(e);
-
             if(e.target.value !== undefined && e.target.value.trim() === ''){
                 if(!$(e.target).hasClass("input-empty")){
                     if(isMandatoryField(this)) {
@@ -334,6 +335,7 @@
                 }
             }
         };
+        {% endblock onInputChange %}
         {% block trigger_onInputChange %}
         $('#category_form').change(onInputChange).change();
         $('#id_resource-group').change(onInputChange).change();
