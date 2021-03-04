@@ -253,7 +253,11 @@ span.grippy::after {
           <a>{% trans "Location and Licenses" %}</a>
       </li>
       <li data-step="3" data-toggle="tab" href="#ownership">
-          <a>{% trans "Optional Metadata" %}</a>
+        {% if UI_REQUIRED_FIELDS|length >= 7 %}
+            <a>{% trans "Required Metadata" %}</a>
+        {% else %}
+            <a>{% trans "Optional Metadata" %}</a>
+        {% endif %}
       </li>
       <li data-step="4"  data-toggle="tab" href="#dataset">
           <a>{% trans "Dataset Attributes" %}</a>
