@@ -91,6 +91,26 @@
             }
             advancedMissing = empty > 0;
           }
+
+        {% if UI_REQUIRED_FIELDS %}
+         var metadataMissing = $('#ownership').find('.input-empty').length > 0;
+          if (metadataMissing) {
+            var inputs = $('#ownership').find('.input-empty');
+            var empty = inputs.length;
+            for (var i=0; i<inputs.length; i++) {
+              if (typeof inputs[i].value !== undefined && inputs[i].value !== '') {
+                empty--;
+              }
+            }
+            metadataMissing = empty > 0;
+          }
+          $('#completeness-hints .metadata-hint')
+            .toggleClass('progress-bar-danger', metadataMissing)
+            .toggleClass('progress-bar-success', !metadataMissing)
+            .attr('title', metadataMissing ? gettext("some schema mandatory fields are missing") : gettext("Metadata Schema mandatory fields completed") )
+            .tooltip('fixTitle');
+        {% endif %}
+
       $('#completeness-hints .mandatory-hint')
         .toggleClass('progress-bar-danger', mandatoryMissing)
         .toggleClass('progress-bar-success', !mandatoryMissing)
@@ -224,7 +244,7 @@
         {% block target %}
           if(target.id === 'category_form' ||
              target.id === 'id_resource-regions' ||
-             target.id === 'id_resource-group'
+             target.id === 'id_resource-group' || {{UI_REQUIRED_FIELDS}}.includes(target.id)
           ) {
               // group selector
               $(target).closest('#basicGroupInfo').toggleClass('has-error', empty);
@@ -307,8 +327,11 @@
                 if(!$(e.target).hasClass("input-empty")){
                     if(isMandatoryField(this)) {
                         setInputEmpty(e.target, true);
-                        if(!!$(this).closest('#mdinfo').length) {
-                            $(e.target).parent().append(gettext("<p class='xxs-font-size mandatory-warning'>&nbsp;&nbsp;&nbsp;<strong>{% trans "* Field declared Mandatory by the Metadata Schema" %}</strong></p>"));
+                        var mandatoryWarning = "<p class='xxs-font-size mandatory-warning'>&nbsp;&nbsp;&nbsp;<strong>{% trans "* Field declared Mandatory by the Metadata Schema" %}</strong></p>"
+                        if (!!$(this).closest('.check-select').length) {
+                            $(e.target).parent().parent().append(gettext(mandatoryWarning));
+                        } else if (!!$(this).closest('#mdinfo').length) {
+                            $(e.target).parent().append(gettext(mandatoryWarning));
                         }
                         empty++;
                     }
@@ -337,8 +360,14 @@
         };
         {% endblock onInputChange %}
         {% block trigger_onInputChange %}
+        {{UI_REQUIRED_FIELDS}}.forEach(element => $('#' + element).change(onInputChange).change());
         $('#category_form').change(onInputChange).change();
         $('#id_resource-group').change(onInputChange).change();
+
+        $( ':input[id*="id_tkeywords"][required]:visible').each( function () {
+            $('#' + this.id).change(onInputChange).change();
+        });
+
         document.querySelector('select[name="resource-keywords"]').onchange=onInputChange
 
         $('#id_resource-regions').change(onInputChange).change();
@@ -445,7 +474,7 @@ $('#id_resource-temporal_extent_start').on('blur', function() {$(this).change(on
               ) {
                 $('#group_mandatoryDialog').modal();
             } else {
-                $('#preview_pleaseWaitDialog').modal();
+                validateRequiredInput()
             }
         });
 
@@ -467,9 +496,25 @@ $('#id_resource-temporal_extent_start').on('blur', function() {$(this).change(on
               ) {
                 $('#group_mandatoryDialog').modal();
             } else {
-                $('#preview_pleaseWaitDialog').modal();
+                validateRequiredInput()
             }
         });
+        
+        function validateRequiredInput() {
+            var errors = []
+            $( ':input[required]').each( function () {
+                if ( this.value.trim() == '' ) {
+                    errors.push(this.id)
+                }
+            });
+            if (errors.length > 0) {
+                console.error("Following items are required: " + errors)
+                $(".general_errors").find("p").html(errors.join('<br>'));
+                $('#error_mandatoryDialog').modal();
+            } else {
+                $('#preview_pleaseWaitDialog').modal();
+            }
+        }
 
         $('#btn_upd_md_done').click(function(){
             if
@@ -672,7 +717,6 @@ $('#id_resource-temporal_extent_start').on('blur', function() {$(this).change(on
             success: function(data) {
                 data = JSON.parse(data)
                 var kws = parseKeywords(data);
-
                 {% if freetext_readonly %}
                     $('#id_resource-keywords').tokenfield({
                         createTokensOnBlur: true,
@@ -691,7 +735,6 @@ $('#id_resource-temporal_extent_start').on('blur', function() {$(this).change(on
                         if(!exists) {
                             event.preventDefault(); //prevents creation of token
                         }
-
                         var existingTokens = $(this).tokenfield('getTokens');
                         $.each(existingTokens, function(index, token) {
                             if (token.value === event.attrs.value)
@@ -721,7 +764,6 @@ $('#id_resource-temporal_extent_start').on('blur', function() {$(this).change(on
                         });
                     });
                 {% endif %}
-
                 if (window.location.href.match('/metadata_advanced$')) {
                     if (!select_button_active) {
                         const select_button = $('<button id="id_freetext_keyword_select" class="btn btn-primary">Select</button>');
@@ -732,7 +774,6 @@ $('#id_resource-temporal_extent_start').on('blur', function() {$(this).change(on
                     $('#id_freetext_keyword_select').click(function() {
                         $('#id_resource-keywords-tokenfield').blur().focus();
                     });
-
                     const resource_group = $('#id_resource-group');
                     resource_group.empty();
                     resource_group.append('<option value="">-----</option>');
@@ -748,7 +789,6 @@ $('#id_resource-temporal_extent_start').on('blur', function() {$(this).change(on
                         {% endif %}
                     {% endfor %}
                 }
-
                 $('#treeview').treeview({
                     color: "#428bca",
                     expandIcon: "fa fa-folder",
@@ -774,7 +814,6 @@ $('#id_resource-temporal_extent_start').on('blur', function() {$(this).change(on
                         // $('#treeview-toggle').click();
                     }
                 });
-
                 $('#treeview-toggle').click((e, value) => {
                 $('#treeview').toggle();
                 var icon = $(this).find('i');

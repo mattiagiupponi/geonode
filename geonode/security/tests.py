@@ -24,6 +24,7 @@ import json
 import base64
 import logging
 import gisdata
+import importlib
 import contextlib
 
 from urllib.request import urlopen, Request
@@ -33,6 +34,7 @@ from django.conf import settings
 from django.http import HttpRequest
 from django.urls import reverse
 from django.contrib.auth import get_user_model
+from django.test.utils import override_settings
 
 from guardian.shortcuts import (
     get_anonymous_user,
@@ -203,6 +205,40 @@ class SecurityTest(GeoNodeBaseTestSupport):
         self.assertIsNone(
             response,
             msg="Middleware activated for white listed path: {0}".format(black_listed_url))
+
+    @on_ogc_backend(geoserver.BACKEND_PACKAGE)
+    @dump_func_name
+    def test_login_middleware_with_custom_login_url(self):
+        """
+        Tests the Geonode login required authentication middleware with Basic authenticated queries
+        """
+
+        site_url_settings = [settings.SITEURL + "login/custom", "/login/custom", "login/custom"]
+        black_listed_url = reverse("maps_browse")
+
+        for setting in site_url_settings:
+            with override_settings(LOGIN_URL=setting):
+
+                from geonode.security import middleware as mw
+
+                # reload the middleware module to fetch overridden settings
+                importlib.reload(mw)
+                middleware = mw.LoginRequiredMiddleware(None)
+
+                # unauthorized request to black listed URL should be redirected to `redirect_to` URL
+                request = HttpRequest()
+                request.user = get_anonymous_user()
+                request.path = black_listed_url
+
+                response = middleware.process_request(request)
+
+                self.assertIsNotNone(response, "Middleware didn't activate for blacklisted URL.")
+                self.assertEqual(response.status_code, 302)
+                self.assertTrue(
+                    response.get("Location").startswith("/"),
+                    msg=f"Returned redirection should be a valid path starting '/'. "
+                        f"Instead got: {response.get('Location')}",
+                )
 
     @on_ogc_backend(geoserver.BACKEND_PACKAGE)
     @dump_func_name
@@ -1508,14 +1544,13 @@ class GisBackendSignalsTests(ResourceTestCaseMixin, GeoNodeBaseTestSupport):
 
             # Layer Manipulation
             from geonode.geoserver.signals import gs_catalog
-            from geonode.geoserver.helpers import (check_geoserver_is_up,
-                                                   get_sld_for,
-                                                   fixup_style,
-                                                   set_layer_style,
-                                                   set_attributes_from_geoserver,
-                                                   set_styles,
-                                                   create_gs_thumbnail,
-                                                   cleanup)
+            from geonode.geoserver.helpers import (
+                check_geoserver_is_up,
+                set_layer_style,
+                set_attributes_from_geoserver,
+                set_styles,
+                create_gs_thumbnail,
+                cleanup)
             check_geoserver_is_up()
 
             admin_user = get_user_model().objects.get(username="admin")
@@ -1550,10 +1585,6 @@ class GisBackendSignalsTests(ResourceTestCaseMixin, GeoNodeBaseTestSupport):
                     sld = sld.decode().strip('\n')
                 _log("sld. ------------ %s " % sld)
                 set_layer_style(test_perm_layer, test_perm_layer.alternate, sld)
-
-                fixup_style(gs_catalog, test_perm_layer.alternate, None)
-                self.assertIsNotNone(get_sld_for(gs_catalog, test_perm_layer))
-                _log("fixup_sld. ------------ %s " % get_sld_for(gs_catalog, test_perm_layer))
 
             create_gs_thumbnail(test_perm_layer, overwrite=True)
             self.assertIsNotNone(test_perm_layer.get_thumbnail_url())

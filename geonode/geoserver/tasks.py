@@ -18,8 +18,8 @@
 #
 #########################################################################
 import os
+import re
 import shutil
-import geoserver
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
@@ -161,7 +161,6 @@ def geoserver_create_style(
     lock_id = f'{self.request.id}'
     with AcquireLock(lock_id) as lock:
         if lock.acquire() is True and instance:
-            publishing = gs_catalog.get_layer(name)
             if sld_file and os.path.exists(sld_file) and os.access(sld_file, os.R_OK):
                 f = None
                 if os.path.isfile(sld_file):
@@ -175,56 +174,28 @@ def geoserver_create_style(
                             f = open(os.path.join(tempdir, sld_file), 'r')
                         except Exception:
                             pass
-
                 if f:
                     sld = f.read()
                     f.close()
-                else:
-                    sld = get_sld_for(gs_catalog, publishing)
-            else:
-                sld = get_sld_for(gs_catalog, publishing)
-
-            style = None
-            if sld is not None:
-                try:
-                    gs_catalog.create_style(
-                        name,
-                        sld,
-                        raw=True,
-                        workspace=settings.DEFAULT_WORKSPACE)
-                    gs_catalog.reset()
-                except geoserver.catalog.ConflictingDataError:
-                    try:
-                        gs_catalog.create_style(
-                            name + '_layer',
+                    if not gs_catalog.get_style(name=name, workspace=settings.DEFAULT_WORKSPACE):
+                        style = gs_catalog.create_style(
+                            name,
                             sld,
                             raw=True,
                             workspace=settings.DEFAULT_WORKSPACE)
-                        gs_catalog.reset()
-                    except geoserver.catalog.ConflictingDataError as e:
-                        msg = 'There was already a style named %s in GeoServer, cannot overwrite: "%s"' % (
-                            name, str(e))
-                        logger.error(msg)
-                        e.args = (msg,)
-
-                if style is None:
-                    try:
-                        style = gs_catalog.get_style(
-                            name, workspace=settings.DEFAULT_WORKSPACE) or gs_catalog.get_style(name)
-                    except Exception:
-                        logger.warn('Could not retreive the Layer default Style name')
+                        gs_layer = gs_catalog.get_layer(name)
+                        _default_style = gs_layer.default_style
+                        gs_layer.default_style = style
+                        gs_catalog.save(gs_layer)
+                        set_styles(instance, gs_catalog)
                         try:
-                            style = gs_catalog.get_style(name + '_layer', workspace=settings.DEFAULT_WORKSPACE) or \
-                                gs_catalog.get_style(name + '_layer')
-                            logger.warn(
-                                'No style could be created for the layer, falling back to POINT default one')
+                            gs_catalog.delete(_default_style)
                         except Exception as e:
-                            style = gs_catalog.get_style('point')
-                            logger.warn(str(e))
-                if style:
-                    publishing.default_style = style
-                    logger.debug('default style set to %s', name)
-                    gs_catalog.save(publishing)
+                            logger.exception(e)
+                else:
+                    get_sld_for(gs_catalog, instance)
+            else:
+                get_sld_for(gs_catalog, instance)
 
 
 @app.task(
@@ -525,33 +496,6 @@ def geoserver_post_save_layers(
                     site_url = settings.SITEURL.rstrip('/') if settings.SITEURL.startswith('http') else settings.SITEURL
                     gs_resource.attribution_link = site_url + profile.get_absolute_url()
 
-                """Get information from geoserver.
-
-                The attributes retrieved include:
-
-                * Bounding Box
-                * SRID
-                * Download links (WMS, WCS or WFS and KML)
-                * Styles (SLD)
-                """
-                try:
-                    # This is usually done in Layer.pre_save, however if the hooks
-                    # are bypassed by custom create/updates we need to ensure the
-                    # bbox is calculated properly.
-                    bbox = gs_resource.native_bbox
-                    instance.set_bbox_polygon([bbox[0], bbox[2], bbox[1], bbox[3]], gs_resource.projection)
-                except Exception as e:
-                    logger.exception(e)
-
-                if instance.srid:
-                    instance.srid_url = "http://www.spatialreference.org/ref/" + \
-                        instance.srid.replace(':', '/').lower() + "/"
-                elif instance.bbox_polygon is not None:
-                    # Guessing 'EPSG:4326' by default
-                    instance.srid = 'EPSG:4326'
-                else:
-                    raise GeoNodeException(_("Invalid Projection. Layer is missing CRS!"))
-
                 # Iterate over values from geoserver.
                 for key in ['alternate', 'store', 'storeType']:
                     # attr_name = key if 'typename' not in key else 'alternate'
@@ -585,12 +529,38 @@ def geoserver_post_save_layers(
                     logger.exception(e)
 
                 # store the resource to avoid another geoserver call in the post_save
+                """Get information from geoserver.
+
+                The attributes retrieved include:
+
+                * Bounding Box
+                * SRID
+                """
+                try:
+                    # This is usually done in Layer.pre_save, however if the hooks
+                    # are bypassed by custom create/updates we need to ensure the
+                    # bbox is calculated properly.
+                    srid = gs_resource.projection
+                    bbox = gs_resource.native_bbox
+                    instance.set_bbox_polygon([bbox[0], bbox[2], bbox[1], bbox[3]], srid)
+                except Exception as e:
+                    logger.exception(e)
+                    srid = instance.srid
+                    bbox = instance.bbox
+
+                if instance.srid:
+                    instance.srid_url = "http://www.spatialreference.org/ref/" + \
+                        instance.srid.replace(':', '/').lower() + "/"
+                elif instance.bbox_polygon is not None:
+                    # Guessing 'EPSG:4326' by default
+                    instance.srid = 'EPSG:4326'
+                else:
+                    raise GeoNodeException(_("Invalid Projection. Layer is missing CRS!"))
+
                 to_update = {
                     'title': instance.title or instance.name,
                     'abstract': instance.abstract or "",
-                    'alternate': instance.alternate,
-                    'bbox_polygon': instance.bbox_polygon,
-                    'srid': 'EPSG:4326'
+                    'alternate': instance.alternate
                 }
 
                 if is_monochromatic_image(instance.thumbnail_url):
@@ -610,6 +580,15 @@ def geoserver_post_save_layers(
                         to_update['typename'] = instance.alternate
 
                         Layer.objects.filter(id=instance.id).update(**to_update)
+
+                        # Dealing with the BBOX: this is a trick to let GeoDjango storing original coordinates
+                        instance.set_bbox_polygon([bbox[0], bbox[2], bbox[1], bbox[3]], 'EPSG:4326')
+                        Layer.objects.filter(id=instance.id).update(
+                            bbox_polygon=instance.bbox_polygon, srid='EPSG:4326')
+                        match = re.match(r'^(EPSG:)?(?P<srid>\d{4,6})$', str(srid))
+                        instance.bbox_polygon.srid = int(match.group('srid')) if match else 4326
+                        Layer.objects.filter(id=instance.id).update(
+                            ll_bbox_polygon=instance.bbox_polygon, srid=srid)
 
                         # Refresh from DB
                         instance.refresh_from_db()
