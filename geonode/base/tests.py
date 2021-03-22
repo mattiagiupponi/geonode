@@ -931,6 +931,7 @@ class TestThesaurusAvailableForm(TestCase):
         obj_class = required.widget.attrs.get('class')
         self.assertTrue(obj_class == '')
 
+
 class TestFacets(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create(username='test', email='test@test.com')

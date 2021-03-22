@@ -250,6 +250,11 @@
               $('input#id_crop_file').removeClass("input-empty");
               $('input#id_crop_file').parent().find(".mandatory-warning").remove();
           }
+          var imgMissing = $('img#image').attr('src');
+          if (imgMissing && !imgMissing.includes('missing_thumb')) {
+              $('input#id_crop_file').removeClass("input-empty");
+              $('input#id_crop_file').parent().find(".mandatory-warning").remove();
+          }
 
           if(target.id === 'id_resource-keywords') {
             $(target).siblings('span').toggleClass('has-error', empty);
@@ -403,6 +408,10 @@
 
         document.querySelector('select[name="resource-keywords"]').onchange=onInputChange;
         {{REQ_THESAURI}}.forEach(element => document.querySelector('select[name="'+ element + '"]').onchange=onInputChange);
+
+        $( ':input[id*="id_tkeywords"][required]:visible').each( function () {
+            $('#' + this.id).change(onInputChange).change();
+        });
 
         $('#id_resource-regions').change(onInputChange).change();
         $('#id_resource-temporal_extent_end').on('blur', function() {$(this).change(onInputChange).change();})
