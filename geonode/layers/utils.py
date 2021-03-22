@@ -558,6 +558,8 @@ def file_upload(filename,
     # Get a bounding box
     *bbox, srid = get_bbox(filename)
     bbox_polygon = BBOXHelper.from_xy(bbox).as_polygon()
+    x = bbox_polygon.tuple[0] + layer.bbox_polygon.tuple[0]
+    setattr(bbox_polygon, 'tuple', tuple(x))
 
     if srid:
         srid_url = "http://www.spatialreference.org/ref/" + srid.replace(':', '/').lower() + "/"  # noqa

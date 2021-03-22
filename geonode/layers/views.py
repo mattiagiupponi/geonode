@@ -1373,6 +1373,29 @@ def layer_replace(request, layername, template='layers/layer_replace.html'):
             content_type='application/json',
             status=status_code)
 
+@login_required
+def layer_append(request, layername, template='layers/layer_append.html'):
+    try:
+        layer = _resolve_layer(
+            request,
+            layername,
+            'base.change_resourcebase',
+            _PERMISSION_MSG_MODIFY)
+    except PermissionDenied:
+        return HttpResponse(_("Not allowed"), status=403)
+    except Exception:
+        raise Http404(_("Not found"))
+    if not layer:
+        raise Http404(_("Not found"))
+
+    if request.method == 'GET':
+        ctx = {
+            'charsets': CHARSETS,
+            'resource': layer,
+            'is_featuretype': layer.is_vector(),
+            'is_layer': True,
+        }
+        return render(request, template, context=ctx)
 
 @login_required
 def layer_remove(request, layername, template='layers/layer_remove.html'):
