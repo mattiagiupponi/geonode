@@ -71,7 +71,7 @@ from geonode.base.enumerations import CHARSETS
 from geonode.decorators import check_keyword_write_perms
 
 from geonode.layers.forms import (
-    LayerForm,
+    LayerAppenddForm, LayerForm,
     LayerUploadForm,
     NewLayerUploadForm,
     LayerAttributeForm)
@@ -114,7 +114,7 @@ from geonode.tasks.tasks import set_permissions
 from celery.utils.log import get_logger
 
 if check_ogc_backend(geoserver.BACKEND_PACKAGE):
-    from geonode.geoserver.helpers import gs_catalog
+    from geonode.geoserver.helpers import gs_catalog, gs_uploader
 
 CONTEXT_LOG_FILE = ogc_server_settings.LOG_FILE
 
@@ -1375,6 +1375,7 @@ def layer_replace(request, layername, template='layers/layer_replace.html'):
 
 @login_required
 def layer_append(request, layername, template='layers/layer_append.html'):
+
     try:
         layer = _resolve_layer(
             request,
@@ -1388,15 +1389,45 @@ def layer_append(request, layername, template='layers/layer_append.html'):
     if not layer:
         raise Http404(_("Not found"))
 
-    if request.method == 'GET':
+    if request.method == 'POST':
+        form = LayerAppenddForm()
         ctx = {
             'charsets': CHARSETS,
+            "form": form,
             'resource': layer,
             'is_featuretype': layer.is_vector(),
             'is_layer': True,
         }
         return render(request, template, context=ctx)
+    elif request.method == 'GET':
+        #form = LayerAppenddForm(request.POST, request.FILES)
+        out = {}
+        base_file ="/opt/je/asksakl.shp"
+        if (
+            os.getenv('DEFAULT_BACKEND_DATASTORE', None ) == 'datastore'
+            and os.getenv('DEFAULT_BACKEND_UPLOADER', None ) == 'geonode.importer'
+            and layer.is_vector() and not is_raster(base_file)
+        ):
+            gs_append_data_to_layer(layer)
+        else:   
+            return HttpResponse(
+                json.dumps(out),
+                content_type='application/json',
+                status=400)
 
+def gs_append_data_to_layer(layer):
+    x = gs_catalog.get_layer(layer.name)
+    if x and x.type == 'VECTOR':
+        file = "/mnt/c/Users/user/Desktop/Impianti/scaricatori.shp"
+        upload_session, created = UploadSession.objects.get_or_create(resource=layer)
+        upload_session.resource = layer
+        upload_session.processed = False
+        upload_session.save()
+        #import_session = gs_uploader.start_import(upload_session.id)
+
+        z = gs_uploader.upload(file, import_id=upload_session.id)
+
+    return
 @login_required
 def layer_remove(request, layername, template='layers/layer_remove.html'):
     try:
