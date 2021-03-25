@@ -1423,9 +1423,11 @@ def gs_append_data_to_layer(layer):
         upload_session.resource = layer
         upload_session.processed = False
         upload_session.save()
-        #import_session = gs_uploader.start_import(upload_session.id)
-        z = gs_uploader.upload(file, import_id=upload_session.id)
-        z.commit()
+        import_session = gs_uploader.start_import(upload_session.id)
+        import_session._client().put()
+        #import_session.upload_task([file])
+        #setattr(import_session.tasks[0], 'updateMode', 'APPEND')
+        #import_session.commit()
 
     return
 @login_required
