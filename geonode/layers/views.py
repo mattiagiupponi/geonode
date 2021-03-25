@@ -48,6 +48,7 @@ from django.shortcuts import render
 from django.conf import settings
 from django.utils.translation import ugettext as _
 from django.views.decorators.http import require_http_methods
+import requests
 
 from geonode.thumbs.thumbnails import create_thumbnail
 
@@ -1418,16 +1419,23 @@ def layer_append(request, layername, template='layers/layer_append.html'):
 def gs_append_data_to_layer(layer):
     x = gs_catalog.get_layer(layer.name)
     if x and x.type == 'VECTOR':
-        file = "/mnt/c/Users/user/Desktop/Impianti/scaricatori.shp"
+        file = ["/mnt/c/Users/user/Desktop/Impianti/scaricatori.shp",
+        "/mnt/c/Users/user/Desktop/Impianti/scaricatori.prj",
+        "/mnt/c/Users/user/Desktop/Impianti/scaricatori.shx",
+        "/mnt/c/Users/user/Desktop/Impianti/scaricatori.dbf"]
         upload_session, created = UploadSession.objects.get_or_create(resource=layer)
         upload_session.resource = layer
         upload_session.processed = False
         upload_session.save()
         import_session = gs_uploader.start_import(upload_session.id)
-        import_session._client().put()
-        #import_session.upload_task([file])
+        import_session.upload_task(file)
+        task = import_session.tasks[0]
+        task.layer.set_target_layer_name(layer.name)
+        task.set_update_mode("APPEND")
+        task.set_target(store_name='geonode_data', workspace='geonode')
+
         #setattr(import_session.tasks[0], 'updateMode', 'APPEND')
-        #import_session.commit()
+        import_session.commit(sync=True)
 
     return
 @login_required
