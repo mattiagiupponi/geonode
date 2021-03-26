@@ -63,6 +63,8 @@ from geonode.utils import (check_ogc_backend,
                            unzip_file,
                            extract_tarfile)
 
+from geonode.geoserver.helpers import gs_catalog, gs_uploader
+
 READ_PERMISSIONS = [
     'view_resourcebase'
 ]
@@ -558,8 +560,6 @@ def file_upload(filename,
     # Get a bounding box
     *bbox, srid = get_bbox(filename)
     bbox_polygon = BBOXHelper.from_xy(bbox).as_polygon()
-    x = bbox_polygon.tuple[0] + layer.bbox_polygon.tuple[0]
-    setattr(bbox_polygon, 'tuple', tuple(x))
 
     if srid:
         srid_url = "http://www.spatialreference.org/ref/" + srid.replace(':', '/').lower() + "/"  # noqa
@@ -1126,3 +1126,25 @@ def set_layers_permissions(permissions_name, resources_names=None,
 def get_uuid_handler():
     from django.utils.module_loading import import_string
     return import_string(settings.LAYER_UUID_HANDLER)
+
+
+def gs_append_data_to_layer(layer, base_files):
+    gs_layer = gs_catalog.get_layer(layer.name)
+    if gs_layer and gs_layer.type == 'VECTOR':
+        #  opening upload session for the selected layer
+        upload_session, created = UploadSession.objects.get_or_create(resource=layer)
+        upload_session.resource = layer
+        upload_session.processed = False
+        upload_session.save()
+
+        #  opening Import session for the selected layer
+        import_session = gs_uploader.start_import(upload_session.id)
+        import_session.upload_task(base_files)
+        task = import_session.tasks[0]
+        #  Changing layer name, mode and target
+        task.layer.set_target_layer_name(layer.name)
+        task.set_update_mode("APPEND")
+        task.set_target(store_name=gs_layer.resource.store.name, workspace=gs_layer.resource.workspace.name)
+        #  Starting import process
+        import_session.commit()
+        return upload_session

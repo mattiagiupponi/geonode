@@ -48,7 +48,6 @@ from django.shortcuts import render
 from django.conf import settings
 from django.utils.translation import ugettext as _
 from django.views.decorators.http import require_http_methods
-import requests
 
 from geonode.thumbs.thumbnails import create_thumbnail
 
@@ -72,7 +71,7 @@ from geonode.base.enumerations import CHARSETS
 from geonode.decorators import check_keyword_write_perms
 
 from geonode.layers.forms import (
-    LayerAppenddForm, LayerForm,
+    LayerForm,
     LayerUploadForm,
     NewLayerUploadForm,
     LayerAttributeForm)
@@ -81,7 +80,7 @@ from geonode.layers.models import (
     Attribute,
     UploadSession)
 from geonode.layers.utils import (
-    file_upload,
+    file_upload, gs_append_data_to_layer,
     is_raster,
     is_vector,
     surrogate_escape_string)
@@ -114,8 +113,7 @@ from geonode.tasks.tasks import set_permissions
 
 from celery.utils.log import get_logger
 
-if check_ogc_backend(geoserver.BACKEND_PACKAGE):
-    from geonode.geoserver.helpers import gs_catalog, gs_uploader
+from geonode.geoserver.helpers import gs_catalog
 
 CONTEXT_LOG_FILE = ogc_server_settings.LOG_FILE
 
@@ -1374,6 +1372,7 @@ def layer_replace(request, layername, template='layers/layer_replace.html'):
             content_type='application/json',
             status=status_code)
 
+
 @login_required
 def layer_append(request, layername, template='layers/layer_append.html'):
 
@@ -1390,54 +1389,71 @@ def layer_append(request, layername, template='layers/layer_append.html'):
     if not layer:
         raise Http404(_("Not found"))
 
-    if request.method == 'POST':
-        form = LayerAppenddForm()
+    if request.method == 'GET':
         ctx = {
             'charsets': CHARSETS,
-            "form": form,
             'resource': layer,
             'is_featuretype': layer.is_vector(),
             'is_layer': True,
         }
         return render(request, template, context=ctx)
-    elif request.method == 'GET':
-        #form = LayerAppenddForm(request.POST, request.FILES)
+    elif request.method == 'POST':
+        form = LayerUploadForm(request.POST, request.FILES)
         out = {}
-        base_file ="/opt/je/asksakl.shp"
-        if (
-            os.getenv('DEFAULT_BACKEND_DATASTORE', None ) == 'datastore'
-            and os.getenv('DEFAULT_BACKEND_UPLOADER', None ) == 'geonode.importer'
-            and layer.is_vector() and not is_raster(base_file)
-        ):
-            gs_append_data_to_layer(layer)
-        else:   
-            return HttpResponse(
-                json.dumps(out),
-                content_type='application/json',
-                status=400)
+        if form.is_valid():
+            try:
+                tempdir, base_file = form.write_files()
+                if layer.is_vector() and is_raster(base_file):
+                    out['success'] = False
+                    out['errors'] = _(
+                        "You are attempting to replace a vector layer with a raster.")
+                elif (not layer.is_vector()) and is_vector(base_file):
+                    out['success'] = False
+                    out['errors'] = _(
+                        "You are attempting to replace a raster layer with a vector.")
+                else:
+                    out = {}
+                    if (
+                        os.getenv("DEFAULT_BACKEND_DATASTORE", None) == "datastore"
+                        and os.getenv("DEFAULT_BACKEND_UPLOADER", None) == "geonode.importer"
+                    ):
+                        file_to_upload = [f'{tempdir}/{file}' for file in os.listdir(tempdir)]
+                        upload_session = gs_append_data_to_layer(layer, file_to_upload)
+                        upload_session.processed = True
+                        upload_session.save()
+                        out['success'] = True
+                        out['url'] = reverse(
+                            'layer_detail', args=[
+                                layer.service_typename])
+                    else:
+                        out['success'] = False
+                        out['errors'] = str("Please select a valid Geoserver backend")
+            except Exception as e:
+                logger.exception(e)
+                out['success'] = False
+                out['errors'] = str(e)
+            finally:
+                if tempdir is not None:
+                    shutil.rmtree(tempdir)
+        else:
+            errormsgs = []
+            for e in form.errors.values():
+                errormsgs.append([escape(v) for v in e])
+            out['errors'] = form.errors
+            out['errormsgs'] = errormsgs
 
-def gs_append_data_to_layer(layer):
-    x = gs_catalog.get_layer(layer.name)
-    if x and x.type == 'VECTOR':
-        file = ["/mnt/c/Users/user/Desktop/Impianti/scaricatori.shp",
-        "/mnt/c/Users/user/Desktop/Impianti/scaricatori.prj",
-        "/mnt/c/Users/user/Desktop/Impianti/scaricatori.shx",
-        "/mnt/c/Users/user/Desktop/Impianti/scaricatori.dbf"]
-        upload_session, created = UploadSession.objects.get_or_create(resource=layer)
-        upload_session.resource = layer
-        upload_session.processed = False
-        upload_session.save()
-        import_session = gs_uploader.start_import(upload_session.id)
-        import_session.upload_task(file)
-        task = import_session.tasks[0]
-        task.layer.set_target_layer_name(layer.name)
-        task.set_update_mode("APPEND")
-        task.set_target(store_name='geonode_data', workspace='geonode')
+        if out['success']:
+            status_code = 200
+            register_event(request, 'change', layer)
+        else:
+            status_code = 400
 
-        #setattr(import_session.tasks[0], 'updateMode', 'APPEND')
-        import_session.commit(sync=True)
+        return HttpResponse(
+            json.dumps(out),
+            content_type='application/json',
+            status=status_code)
 
-    return
+
 @login_required
 def layer_remove(request, layername, template='layers/layer_remove.html'):
     try:
