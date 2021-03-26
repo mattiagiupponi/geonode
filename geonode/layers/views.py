@@ -80,10 +80,10 @@ from geonode.layers.models import (
     Attribute,
     UploadSession)
 from geonode.layers.utils import (
-    file_upload, gs_append_data_to_layer,
+    file_upload, get_files, gs_append_data_to_layer,
     is_raster,
     is_vector,
-    surrogate_escape_string)
+    surrogate_escape_string, validate_input_source)
 
 from geonode.maps.models import Map
 from geonode.services.models import Service
@@ -1375,7 +1375,6 @@ def layer_replace(request, layername, template='layers/layer_replace.html'):
 
 @login_required
 def layer_append(request, layername, template='layers/layer_append.html'):
-
     try:
         layer = _resolve_layer(
             request,
@@ -1402,32 +1401,26 @@ def layer_append(request, layername, template='layers/layer_append.html'):
         out = {}
         if form.is_valid():
             try:
-                tempdir, base_file = form.write_files()
-                if layer.is_vector() and is_raster(base_file):
-                    out['success'] = False
-                    out['errors'] = _(
-                        "You are attempting to replace a vector layer with a raster.")
-                elif (not layer.is_vector()) and is_vector(base_file):
-                    out['success'] = False
-                    out['errors'] = _(
-                        "You are attempting to replace a raster layer with a vector.")
+                tempdir, base_file = form.write_files()                
+                files = get_files(base_file)
+                validate_input_source(layer=layer, filename=base_file, files=files, action_type='append')
+                out = {}
+                if (
+                    os.getenv("DEFAULT_BACKEND_DATASTORE", None) == "datastore"
+                    and os.getenv("DEFAULT_BACKEND_UPLOADER", None) == "geonode.importer"
+                ):
+                    #file_to_upload = [f'{tempdir}/{file}' for file in os.listdir(tempdir)]
+                    upload_session = gs_append_data_to_layer(layer, list(files.values()))
+                    upload_session.processed = True
+                    upload_session.save()
+                    out['success'] = True
+                    out['url'] = reverse(
+                        'layer_detail', args=[
+                            layer.service_typename])
+                    #layer.save()
                 else:
-                    out = {}
-                    if (
-                        os.getenv("DEFAULT_BACKEND_DATASTORE", None) == "datastore"
-                        and os.getenv("DEFAULT_BACKEND_UPLOADER", None) == "geonode.importer"
-                    ):
-                        file_to_upload = [f'{tempdir}/{file}' for file in os.listdir(tempdir)]
-                        upload_session = gs_append_data_to_layer(layer, file_to_upload)
-                        upload_session.processed = True
-                        upload_session.save()
-                        out['success'] = True
-                        out['url'] = reverse(
-                            'layer_detail', args=[
-                                layer.service_typename])
-                    else:
-                        out['success'] = False
-                        out['errors'] = str("Please select a valid Geoserver backend")
+                    out['success'] = False
+                    out['errors'] = str("Please select a valid Geoserver backend")
             except Exception as e:
                 logger.exception(e)
                 out['success'] = False

@@ -210,10 +210,6 @@ class LayerUploadForm(forms.Form):
         return tempdir, absolute_base_file
 
 
-class LayerAppenddForm(forms.Form):
-    shp_file = forms.FileField(required=False)
-
-
 class NewLayerUploadForm(LayerUploadForm):
     if check_ogc_backend(geoserver.BACKEND_PACKAGE):
         sld_file = forms.FileField(required=False)

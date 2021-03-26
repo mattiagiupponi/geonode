@@ -1308,3 +1308,76 @@ class LayersStylesApiInteractionTests(
         self.assertValidJSONResponse(resp)
         obj = self.deserialize(resp)
         self.assertIsNotNone(obj['default_style'])
+
+
+
+class LayerAppendIntegrationTest(ResourceTestCaseMixin, GeoNodeLiveTestSupport):
+    @timeout_decorator.timeout(LOCAL_TIMEOUT)
+    def test_layer_append(self):
+        """Test layer replace functionality
+        """
+        vector_file = os.path.join(
+            gisdata.VECTOR_DATA,
+            'san_andres_y_providencia_administrative.shp')
+        vector_layer = file_upload(vector_file, overwrite=True)
+
+        raster_file = os.path.join(gisdata.RASTER_DATA, 'test_grid.tif')
+        raster_layer = file_upload(raster_file, overwrite=True)
+
+        # we need some time to have the service up and running
+        time.sleep(20)
+        new_vector_layer = None
+        try:
+            self.client.login(username='admin', password='admin')
+
+            # test the program can determine the original layer in raster type
+            raster_append_url = reverse(
+                'layer_append', args=[
+                    raster_layer.service_typename])
+            response = self.client.get(raster_append_url)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.context['is_featuretype'], False)
+
+            # test the program can determine the original layer in vector type
+            vector_append_url = reverse(
+                'layer_append', args=[
+                    vector_layer.service_typename])
+            response = self.client.get(vector_append_url)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.context['is_featuretype'], True)
+            post_permissions = {
+                'users': {
+                    'AnonymousUser': [
+                        'view_resourcebase', 'download_resourcebase']
+                },
+                'groups': {}
+            }
+            post_data = {
+                'base_file': open(
+                    raster_file, 'rb'),
+                'permissions': json.dumps(post_permissions)
+            }
+            response = self.client.post(
+                vector_append_url, post_data)
+            # TODO: This should really return a 400 series error with the json dict
+            self.assertEqual(response.status_code, 400)
+
+            # test replace a vector with a different vector
+            new_vector_file = os.path.join(
+                gisdata.VECTOR_DATA,
+                'san_andres_y_providencia_coastline.shp')
+            layer_path, __ = os.path.splitext(new_vector_file)
+
+        finally:
+            # Clean up and completely delete the layer
+            try:
+                if vector_layer:
+                    vector_layer.delete()
+                if raster_layer:
+                    raster_layer.delete()
+                if new_vector_layer:
+                    new_vector_layer.delete()
+            except Exception:
+                # tb = traceback.format_exc()
+                # logger.warning(tb)
+                pass
