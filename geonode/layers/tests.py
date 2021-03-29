@@ -18,9 +18,7 @@
 #
 #########################################################################
 from collections import namedtuple
-from uuid import uuid4
 
-from django.utils.timezone import now
 from geonode.tests.base import GeoNodeBaseTestSupport
 from django.test import TestCase
 import io
@@ -61,7 +59,7 @@ from geonode.layers.utils import (
     get_valid_layer_name,
     surrogate_escape_string, validate_input_source)
 from geonode.people.utils import get_valid_user
-from geonode.base.populate_test_data import all_public
+from geonode.base.populate_test_data import all_public, create_single_layer
 from geonode.base.models import TopicCategory, License, Region, Link
 from geonode.layers.forms import JSONField, LayerUploadForm
 from geonode.utils import check_ogc_backend, set_resource_default_links
@@ -1711,27 +1709,7 @@ class TestalidateInputSource(TestCase):
 
     def setUp(self):
         self.maxDiff = None
-        user = get_user_model().objects.get(username='AnonymousUser')
-        ll = ('single_point', 'lorem ipsum', 'single_point', 'geonode:single_point', [
-                      0, 22, 0, 22], now(), ('populartag',), "farming")
-        title, abstract, name, alternate, (bbox_x0, bbox_x1, bbox_y0, bbox_y1), start, kws, category = ll
-        self.layer = Layer(
-            title=title,
-            abstract=abstract,
-            name=name,
-            alternate=alternate,
-            bbox_polygon=Polygon.from_bbox((bbox_x0, bbox_y0, bbox_x1, bbox_y1)),
-            ll_bbox_polygon=Polygon.from_bbox((bbox_x0, bbox_y0, bbox_x1, bbox_y1)),
-            srid='EPSG:4326',
-            uuid=str(uuid4()),
-            owner=user,
-            temporal_extent_start=start,
-            temporal_extent_end=now(),
-            date=start,
-            storeType="dataStore",
-        )
-        self.layer.save()
-        self.layer.set_default_permissions()
+        self.layer = create_single_layer('single_point')
         self.r = namedtuple('GSCatalogRes', ['resource'])
 
     def tearDown(self):

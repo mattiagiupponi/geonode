@@ -1083,11 +1083,11 @@ def get_uuid_handler():
     return import_string(settings.LAYER_UUID_HANDLER)
 
 
-def gs_append_data_to_layer(layer, base_files):
+def gs_append_data_to_layer(layer, base_files, user):
     gs_layer = gs_catalog.get_layer(layer.name)
     if gs_layer and gs_layer.type == 'VECTOR':
         #  opening upload session for the selected layer
-        upload_session, created = UploadSession.objects.get_or_create(resource=layer)
+        upload_session, created = UploadSession.objects.get_or_create(resource=layer, user=user)
         upload_session.resource = layer
         upload_session.processed = False
         upload_session.save()
@@ -1096,6 +1096,7 @@ def gs_append_data_to_layer(layer, base_files):
         import_session = gs_uploader.start_import(
             import_id=upload_session.id, name=layer.name, target_store=gs_layer.resource.store.name
         )
+
         import_session.upload_task(base_files)
         task = import_session.tasks[0]
         #  Changing layer name, mode and target

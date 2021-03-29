@@ -1413,7 +1413,7 @@ def layer_append(request, layername, template='layers/layer_append.html'):
                     and os.getenv("DEFAULT_BACKEND_UPLOADER", None) == "geonode.importer"
                     and resource_is_valid
                 ):
-                    upload_session = gs_append_data_to_layer(layer, list(files.values()))
+                    upload_session = gs_append_data_to_layer(layer, list(files.values()), request.user)
                     upload_session.processed = True
                     upload_session.save()
                     out['success'] = True
