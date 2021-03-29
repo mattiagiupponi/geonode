@@ -977,7 +977,7 @@ def setup_data(options):
     if settings and 'DJANGO_SETTINGS_MODULE' not in settings:
         settings = f'DJANGO_SETTINGS_MODULE={settings}'
 
-    sh(f"{settings} python -W ignore manage.py importlayers {data_dir} -v2 --settings=geonode.local_settings")
+    sh(f"{settings} python -W ignore manage.py importlayers {data_dir} -v2")
 
 
 @needs(['package'])
