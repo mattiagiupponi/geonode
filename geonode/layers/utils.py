@@ -1198,13 +1198,20 @@ def validate_input_source(layer, filename, files, gtype=None, action_type='repla
                             that is consistent with the file you are trying to {action_type}."))
 
                 new_schema_fields = [field.name for field in lyr.schema]
-                gs_layer = gs_catalog.get_layer(layer.name).resource.attributes
-                schema_is_compliant = all([x in gs_layer for x in new_schema_fields ])
+                gs_layer = gs_catalog.get_layer(layer.name)
+
+                if not gs_layer:
+                    raise Exception(
+                        _("The selected Layer does not exists in the catalog."))
+
+                gs_layer = gs_layer.resource.attributes
+                schema_is_compliant = all([x in gs_layer for x in new_schema_fields])
 
                 if not schema_is_compliant:
                     raise Exception(
-                        _(f"Please ensure that the layer structure  \
-                            is consistent with the file you are trying to {action_type}."))
+                        _("Please ensure that the layer structure is consistent "
+                          f"with the file you are trying to {action_type}."))
+                return True
             except Exception as e:
                 raise Exception(
                     _(f"Some error occurred while trying to access the uploaded schema: {str(e)}"))

@@ -17,6 +17,13 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 #########################################################################
+from collections import namedtuple
+from typing import NamedTuple
+from unittest.case import SkipTest
+from uuid import uuid4
+
+from django.test.testcases import LiveServerTestCase
+from django.utils.timezone import now
 from geonode.tests.base import GeoNodeBaseTestSupport
 from django.test import TestCase
 import io
@@ -29,7 +36,7 @@ import zipfile
 import tempfile
 import contextlib
 
-from mock import patch
+from mock import MagicMock, Mock, PropertyMock, patch
 from pinax.ratings.models import OverallRating
 
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -55,7 +62,7 @@ from geonode.layers.utils import (
     get_files,
     get_valid_name,
     get_valid_layer_name,
-    surrogate_escape_string)
+    surrogate_escape_string, validate_input_source)
 from geonode.people.utils import get_valid_user
 from geonode.base.populate_test_data import all_public
 from geonode.base.models import TopicCategory, License, Region, Link
@@ -1701,3 +1708,130 @@ class TestCustomUUidHandler(TestCase):
         expected = "abc:abc-1234-abc"
         actual = Layer.objects.get(id=self.sut.id)
         self.assertEqual(expected, actual.uuid)
+
+
+@override_settings(SITEURL='http://localhost:8001/')
+class TestalidateInputSource(LiveServerTestCase):
+
+    def setUp(self):
+        self.maxDiff = None
+        user = get_user_model().objects.get(username='AnonymousUser')
+        ll = ('single_point', 'lorem ipsum', 'single_point', 'geonode:single_point', [
+                      0, 22, 0, 22], now(), ('populartag',), "farming")
+        title, abstract, name, alternate, (bbox_x0, bbox_x1, bbox_y0, bbox_y1), start, kws, category = ll
+        self.layer = Layer(
+            title=title,
+            abstract=abstract,
+            name=name,
+            alternate=alternate,
+            bbox_polygon=Polygon.from_bbox((bbox_x0, bbox_y0, bbox_x1, bbox_y1)),
+            ll_bbox_polygon=Polygon.from_bbox((bbox_x0, bbox_y0, bbox_x1, bbox_y1)),
+            srid='EPSG:4326',
+            uuid=str(uuid4()),
+            owner=user,
+            temporal_extent_start=start,
+            temporal_extent_end=now(),
+            date=start,
+            storeType="dataStore",
+        )
+        self.layer.save()
+        self.layer.set_default_permissions()
+        self.r = namedtuple('GSCatalogRes', ['resource'])
+
+    def tearDown(self):
+        self.layer.delete()
+
+    def test_will_raise_exception_for_replace_vector_layer_with_raster(self):
+        layer = Layer.objects.filter(name="single_point")[0]
+        filename = "/tpm/filename.tif"
+        files = ["/opt/file1.shp", "/opt/file2.ccc"]
+        with self.assertRaises(Exception) as e:
+            validate_input_source(layer, filename, files, action_type="append")
+        expected = "You are attempting to append a vector layer with a raster."
+        self.assertEqual(expected, e.exception.args[0])
+
+    def test_will_raise_exception_for_replace_layer_with_unknown_format(self):
+        layer = Layer.objects.filter(name="single_point")[0]
+        filename = "/tpm/filename.ccc"
+        files = ["/opt/file1.shp", "/opt/file2.ccc"]
+        with self.assertRaises(Exception) as e:
+            validate_input_source(layer, filename, files, action_type="append")
+        expected = "You are attempting to append a vector layer with an unknown format."
+        self.assertEqual(expected, e.exception.args[0])
+
+    def test_will_raise_exception_for_replace_layer_with_different_file_name(self):
+        layer = Layer.objects.get(name="single_point")
+        file_path = gisdata.VECTOR_DATA
+        filename = os.path.join(file_path, "san_andres_y_providencia_highway.shp")
+        files = {
+            "shp": filename,
+            "dbf": f"{file_path}/san_andres_y_providencia_highway.sbf",
+            "prj": f"{file_path}/san_andres_y_providencia_highway.prj",
+            "shx": f"{file_path}/san_andres_y_providencia_highway.shx",
+        }
+        with self.assertRaises(Exception) as e:
+            validate_input_source(layer, filename, files, action_type="append")
+        expected = (
+            "Some error occurred while trying to access the uploaded schema: "
+            "Please ensure the name is consistent with the file you are trying to append."
+        )
+        self.assertEqual(expected, e.exception.args[0])
+
+    def test_will_raise_exception_for_not_existing_layer_in_the_catalog(self):
+        layer = Layer.objects.filter(name="single_point")[0]
+        file_path = gisdata.VECTOR_DATA
+        filename = os.path.join(file_path, "single_point.shp")
+        files = {
+            "shp": filename,
+            "dbf": f"{file_path}/single_point.sbf",
+            "prj": f"{file_path}/single_point.prj",
+            "shx": f"{file_path}/single_point.shx",
+        }
+        with self.assertRaises(Exception) as e:
+            validate_input_source(layer, filename, files, action_type="append")
+        expected = (
+            "Some error occurred while trying to access the uploaded schema: "
+            "The selected Layer does not exists in the catalog."
+        )
+        self.assertEqual(expected, e.exception.args[0])
+
+    @patch("geonode.layers.utils.gs_catalog")
+    def test_will_raise_exception_if_schema_is_not_equal_between_catalog_and_file(self, catalog):
+        attr = namedtuple('GSCatalogAttr', ['attributes'])
+        attr.attributes = []
+        self.r.resource = attr
+        catalog.get_layer.return_value = self.r
+        layer = Layer.objects.filter(name="single_point")[0]
+        file_path = gisdata.VECTOR_DATA
+        filename = os.path.join(file_path, "single_point.shp")
+        files = {
+            "shp": filename,
+            "dbf": f"{file_path}/single_point.sbf",
+            "prj": f"{file_path}/single_point.prj",
+            "shx": f"{file_path}/single_point.shx",
+        }
+        with self.assertRaises(Exception) as e:
+            validate_input_source(layer, filename, files, action_type="append")
+        expected = (
+            "Some error occurred while trying to access the uploaded schema: "
+            "Please ensure that the layer structure is consistent with the file you are trying to append."
+        )
+        self.assertEqual(expected, e.exception.args[0])
+
+    @patch("geonode.layers.utils.gs_catalog")
+    def test_validation_will_pass_for_valid_append(self, catalog):
+        attr = namedtuple('GSCatalogAttr', ['attributes'])
+        attr.attributes = ['label']
+        self.r.resource = attr
+        catalog.get_layer.return_value = self.r
+        layer = Layer.objects.filter(name="single_point")[0]
+        file_path = gisdata.VECTOR_DATA
+        filename = os.path.join(file_path, "single_point.shp")
+        files = {
+            "shp": filename,
+            "dbf": f"{file_path}/single_point.sbf",
+            "prj": f"{file_path}/single_point.prj",
+            "shx": f"{file_path}/single_point.shx",
+        }
+        actual = validate_input_source(layer, filename, files, action_type="append")
+        self.assertTrue(actual)

@@ -62,14 +62,14 @@
             "django": true
         },
         {
-            "name": "Python: adsasda",
+            "name": "Python: TestalidateInputSource",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/manage.py",
             "cwd": "${workspaceFolder}",
             "args": [
                 "test",
-                "geonode.tests.integration.LayerAppendIntegrationTest",
+                "geonode.layers.tests.TestalidateInputSource",
                 "--settings=geonode.local_settings",
                 "--keepdb"
             ],

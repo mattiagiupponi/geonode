@@ -1401,7 +1401,7 @@ def layer_append(request, layername, template='layers/layer_append.html'):
         out = {}
         if form.is_valid():
             try:
-                tempdir, base_file = form.write_files()                
+                tempdir, base_file = form.write_files()
                 files = get_files(base_file)
                 validate_input_source(layer=layer, filename=base_file, files=files, action_type='append')
                 out = {}
@@ -1409,7 +1409,6 @@ def layer_append(request, layername, template='layers/layer_append.html'):
                     os.getenv("DEFAULT_BACKEND_DATASTORE", None) == "datastore"
                     and os.getenv("DEFAULT_BACKEND_UPLOADER", None) == "geonode.importer"
                 ):
-                    #file_to_upload = [f'{tempdir}/{file}' for file in os.listdir(tempdir)]
                     upload_session = gs_append_data_to_layer(layer, list(files.values()))
                     upload_session.processed = True
                     upload_session.save()
@@ -1417,7 +1416,6 @@ def layer_append(request, layername, template='layers/layer_append.html'):
                     out['url'] = reverse(
                         'layer_detail', args=[
                             layer.service_typename])
-                    #layer.save()
                 else:
                     out['success'] = False
                     out['errors'] = str("Please select a valid Geoserver backend")
