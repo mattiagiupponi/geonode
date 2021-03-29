@@ -1710,8 +1710,7 @@ class TestCustomUUidHandler(TestCase):
         self.assertEqual(expected, actual.uuid)
 
 
-@override_settings(SITEURL='http://localhost:8001/')
-class TestalidateInputSource(LiveServerTestCase):
+class TestalidateInputSource(TestCase):
 
     def setUp(self):
         self.maxDiff = None
