@@ -94,7 +94,7 @@ from geonode.security.views import _perms_info_json
 from geonode.people.forms import ProfileForm, PocForm
 from geonode.documents.models import get_related_documents
 from geonode import geoserver
-from geonode.security.utils import get_visible_resources
+from geonode.security.utils import get_visible_resources, set_geowebcache_invalidate_cache
 
 from geonode.utils import (
     resolve_object,
@@ -1403,7 +1403,10 @@ def layer_append(request, layername, template='layers/layer_append.html'):
             try:
                 tempdir, base_file = form.write_files()
                 files = get_files(base_file)
-                resource_is_valid = validate_input_source(layer=layer, filename=base_file, files=files, action_type='append')
+                #  validate input source
+                resource_is_valid = validate_input_source(
+                    layer=layer, filename=base_file, files=files, action_type="append"
+                )
                 out = {}
                 if (
                     os.getenv("DEFAULT_BACKEND_DATASTORE", None) == "datastore"
@@ -1417,6 +1420,10 @@ def layer_append(request, layername, template='layers/layer_append.html'):
                     out['url'] = reverse(
                         'layer_detail', args=[
                             layer.service_typename])
+                    #  invalidating resource chache
+                    set_geowebcache_invalidate_cache(layer.typename)
+                    #  updating layer
+                    layer.save()
                 else:
                     out['success'] = False
                     out['errors'] = str("Please select a valid Geoserver backend")

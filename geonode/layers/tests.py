@@ -18,11 +18,8 @@
 #
 #########################################################################
 from collections import namedtuple
-from typing import NamedTuple
-from unittest.case import SkipTest
 from uuid import uuid4
 
-from django.test.testcases import LiveServerTestCase
 from django.utils.timezone import now
 from geonode.tests.base import GeoNodeBaseTestSupport
 from django.test import TestCase
@@ -36,7 +33,7 @@ import zipfile
 import tempfile
 import contextlib
 
-from mock import MagicMock, Mock, PropertyMock, patch
+from mock import patch
 from pinax.ratings.models import OverallRating
 
 from django.core.files.uploadedfile import SimpleUploadedFile

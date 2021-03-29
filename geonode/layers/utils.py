@@ -461,52 +461,7 @@ def file_upload(filename,
 
     # We are going to replace an existing Layer...
     if layer and overwrite:
-        if layer.is_vector() and is_raster(filename):
-            raise Exception(_(
-                "You are attempting to replace a vector layer with a raster."))
-        elif (not layer.is_vector()) and is_vector(filename):
-            raise Exception(_(
-                "You are attempting to replace a raster layer with a vector."))
-
-        if layer.is_vector():
-            absolute_base_file = None
-            try:
-                if 'shp' in files and os.path.exists(files['shp']):
-                    absolute_base_file = _fixup_base_file(files['shp'])
-                elif 'zip' in files and os.path.exists(files['zip']):
-                    absolute_base_file = _fixup_base_file(files['zip'])
-            except Exception:
-                absolute_base_file = None
-
-            if not absolute_base_file or \
-            os.path.splitext(absolute_base_file)[1].lower() != '.shp':
-                raise Exception(
-                    _("You are attempting to replace a vector layer with an unknown format."))
-            else:
-                try:
-                    gtype = layer.gtype if not gtype else gtype
-                    inDataSource = ogr.Open(absolute_base_file)
-                    lyr = inDataSource.GetLayer(str(layer.name))
-                    if not lyr:
-                        raise Exception(
-                            _("Please ensure the name is consistent with the file you are trying to replace."))
-                    schema_is_compliant = False
-                    _ff = json.loads(lyr.GetFeature(0).ExportToJson())
-                    if gtype:
-                        logger.warning(
-                            _("Local GeoNode layer has no geometry type."))
-                        if _ff["geometry"]["type"] in gtype or gtype in _ff["geometry"]["type"]:
-                            schema_is_compliant = True
-                    elif "geometry" in _ff and _ff["geometry"]["type"]:
-                        schema_is_compliant = True
-
-                    if not schema_is_compliant:
-                        raise Exception(
-                            _("Please ensure there is at least one geometry type \
-                                that is consistent with the file you are trying to replace."))
-                except Exception as e:
-                    raise Exception(
-                        _(f"Some error occurred while trying to access the uploaded schema: {str(e)}"))
+        validate_input_source(layer, filename, files, gtype, action_type='replace')
 
     # Set a default title that looks nice ...
     if title is None:
