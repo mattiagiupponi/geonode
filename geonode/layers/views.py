@@ -1403,11 +1403,12 @@ def layer_append(request, layername, template='layers/layer_append.html'):
             try:
                 tempdir, base_file = form.write_files()
                 files = get_files(base_file)
-                validate_input_source(layer=layer, filename=base_file, files=files, action_type='append')
+                resource_is_valid = validate_input_source(layer=layer, filename=base_file, files=files, action_type='append')
                 out = {}
                 if (
                     os.getenv("DEFAULT_BACKEND_DATASTORE", None) == "datastore"
                     and os.getenv("DEFAULT_BACKEND_UPLOADER", None) == "geonode.importer"
+                    and resource_is_valid
                 ):
                     upload_session = gs_append_data_to_layer(layer, list(files.values()))
                     upload_session.processed = True
