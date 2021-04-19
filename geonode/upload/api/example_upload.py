@@ -83,3 +83,5 @@ final = client.get(f'http://localhost:8000/upload/final?id={import_id}', auth=HT
 
 print(f'http://localhost:8000/upload/final?id={import_id}')
 print(final.text)
+
+# TODO: add loop for check the status. Must be on PROCESSED to be completed at 100%
