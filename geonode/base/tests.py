@@ -19,16 +19,15 @@
 #########################################################################
 
 import os
-from unittest.mock import patch, Mock
-from urllib.parse import urlparse
-
 import requests
-from django.core.exceptions import ObjectDoesNotExist
+
+from PIL import Image
+from io import BytesIO
+from urllib.parse import urlparse
+from unittest.mock import patch, Mock
+from imagekit.cachefiles.backends import Simple
 
 from guardian.shortcuts import assign_perm, get_perms
-from imagekit.cachefiles.backends import Simple
-from io import BytesIO
-from PIL import Image
 
 from geonode.base.utils import OwnerRightsRequestViewUtils, ManageResourceOwnerPermissions
 from geonode.base.templatetags.base_tags import display_change_perms_button
@@ -49,15 +48,17 @@ from geonode.base.models import (
     ThesaurusKeyword,
     generate_thesaurus_reference
 )
+
 from django.conf import settings
+from django.shortcuts import reverse
 from django.template import Template, Context
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ObjectDoesNotExist
 from django.core.files.storage import default_storage as storage
 from django.test import Client, TestCase, override_settings, SimpleTestCase
-from django.shortcuts import reverse
 
-from geonode.base.middleware import ReadOnlyMiddleware, MaintenanceMiddleware
 from geonode.base.models import CuratedThumbnail
+from geonode.base.middleware import ReadOnlyMiddleware, MaintenanceMiddleware
 from geonode.base.templatetags.base_tags import get_visibile_resources, facets
 from geonode.base.templatetags.thesaurus import (
     get_name_translation, get_thesaurus_localized_label, get_thesaurus_translation_by_id, get_unique_thesaurus_set,

@@ -1616,7 +1616,7 @@ def slugify_zh(text, separator='_'):
 
 
 def get_legend_url(
-        instance, style_name, /,
+        instance, style_name,
         service_url=None,
         layer_name=None,
         version='1.3.0',
@@ -2131,3 +2131,11 @@ def get_subclasses_by_model(model: str):
             for _geoapp in _model.__subclasses__():
                 _app_subclasses.append(_geoapp.__name__)
     return _app_subclasses
+
+def find_by_attr(lst, val, attr="id"):
+    """ Returns an object if the id matches in any list of objects """
+    for item in lst:
+        if attr in item and item[attr] == val:
+            return item
+
+    return None

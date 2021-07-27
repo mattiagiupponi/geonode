@@ -17,25 +17,23 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 #########################################################################
+from geonode.thumbs.exceptions import ThumbnailError
 import logging
+import sys
 from uuid import uuid4
 from PIL import Image
 from io import BytesIO
 from unittest.mock import patch
 from urllib.parse import urljoin
 
-import django
 from django.urls import reverse
 from django.core.files import File
-from django.conf.urls import url, include
-from django.views.generic import TemplateView
+from django.conf.urls import url
 from django.contrib.auth import get_user_model
-from django.views.i18n import JavaScriptCatalog
 from rest_framework.test import APITestCase, URLPatternsTestCase
 
 from guardian.shortcuts import get_anonymous_user
 
-from geonode.api.urls import router
 from geonode.base.models import (
     CuratedThumbnail,
     HierarchicalKeyword,
@@ -48,15 +46,11 @@ from geonode.base.models import (
 from geonode import geoserver
 from geonode.favorite.models import Favorite
 from geonode.utils import check_ogc_backend
-from geonode.services.views import services
-from geonode.maps.views import map_embed
 from geonode.layers.models import Layer
-from geonode.layers.views import layer_embed, layer_detail
-from geonode.geoapps.views import geoapp_edit
 from geonode.base.utils import build_absolute_uri
 from geonode.base.populate_test_data import create_models
 from geonode.security.utils import get_resources_with_perms
-
+from geonode.documents.models import Document
 logger = logging.getLogger(__name__)
 
 test_image = Image.new('RGBA', size=(50, 50), color=(155, 0, 0))
@@ -71,46 +65,7 @@ class BaseApiTests(APITestCase, URLPatternsTestCase):
         "test_thesaurus.json"
     ]
 
-    urlpatterns = [
-        url(r'^home/$',
-            TemplateView.as_view(template_name='index.html'),
-            name='home'),
-        url(r'^help/$',
-            TemplateView.as_view(template_name='help.html'),
-            name='help'),
-        url(r"^account/", include("allauth.urls")),
-        url(r'^people/', include('geonode.people.urls')),
-        url(r'^api/v2/', include(router.urls)),
-        url(r'^api/v2/', include('geonode.api.urls')),
-        url(r'^api/v2/api-auth/', include('rest_framework.urls', namespace='geonode_rest_framework')),
-        url(r'^$',
-            TemplateView.as_view(template_name='layers/layer_list.html'),
-            {'facet_type': 'layers', 'is_layer': True},
-            name='layer_browse'),
-        url(r'^$',
-            TemplateView.as_view(template_name='maps/map_list.html'),
-            {'facet_type': 'maps', 'is_map': True},
-            name='maps_browse'),
-        url(r'^$',
-            TemplateView.as_view(template_name='documents/document_list.html'),
-            {'facet_type': 'documents', 'is_document': True},
-            name='document_browse'),
-        url(r'^$',
-            TemplateView.as_view(template_name='groups/group_list.html'),
-            name='group_list'),
-        url(r'^search/$',
-            TemplateView.as_view(template_name='search/search.html'),
-            name='search'),
-        url(r'^$', services, name='services'),
-        url(r'^invitations/', include(
-            'geonode.invitations.urls', namespace='geonode.invitations')),
-        url(r'^i18n/', include(django.conf.urls.i18n), name="i18n"),
-        url(r'^jsi18n/$', JavaScriptCatalog.as_view(), {}, name='javascript-catalog'),
-        url(r'^(?P<mapid>[^/]+)/embed$', map_embed, name='map_embed'),
-        url(r'^(?P<layername>[^/]+)/embed$', layer_embed, name='layer_embed'),
-        url(r'^(?P<geoappid>[^/]+)/embed$', geoapp_edit, {'template': 'apps/app_embed.html'}, name='geoapp_embed'),
-        url(r'^(?P<layername>[^/]*)$', layer_detail, name="layer_detail"),
-    ]
+    from geonode.urls import urlpatterns
 
     if check_ogc_backend(geoserver.BACKEND_PACKAGE):
         from geonode.geoserver.views import layer_acls, resolve_user
@@ -845,3 +800,110 @@ class BaseApiTests(APITestCase, URLPatternsTestCase):
         response = self.client.get(url, format='json')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['total'], ThesaurusKeyword.objects.count())
+
+    def test_set_thumbnail_from_bbox_from_Anonymous_user_raise_permission_error(self):
+        """
+        Given a request with Anonymous user, should raise an authentication error.
+        """
+        dataset_id = sys.maxsize
+        url = reverse('base-resources-set-thumb-from-bbox', args=[dataset_id])
+        # Anonymous
+        expected = {
+            "detail": "Authentication credentials were not provided."
+        }
+        response = self.client.post(url, format='json')
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(expected, response.json())
+
+    @patch("geonode.base.api.views.create_thumbnail")
+    def test_set_thumbnail_from_bbox_from_logged_user_for_existing_dataset(self, mock_create_thumbnail):
+        """
+        Given a logged User and an existing dataset, should create the expected thumbnail url.
+        """
+        mock_create_thumbnail.return_value = "http://localhost:8000/mocked_url.jpg"
+        # Admin
+        self.client.login(username="admin", password="admin")
+        dataset_id = Layer.objects.first().resourcebase_ptr_id
+        url = reverse('base-resources-set-thumb-from-bbox', args=[dataset_id])
+        payload = {
+            "bbox": [
+                -9072629.904175375,
+                -9043966.018568434,
+                1491839.8773032012,
+                1507127.2829602365
+            ],
+            "srid": "EPSG:3857"
+        }
+        response = self.client.post(url, data=payload, format='json')
+
+        expected = {
+            "thumbnail_url": "http://localhost:8000/mocked_url.jpg"
+        }
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(expected, response.json())
+
+    def test_set_thumbnail_from_bbox_from_logged_user_for_not_existing_dataset(self):
+        """
+        Given a logged User and an not existing dataset, should raise a 404 error.
+        """
+        # Admin
+        self.client.login(username="admin", password="admin")
+        dataset_id = sys.maxsize
+        url = reverse('base-resources-set-thumb-from-bbox', args=[dataset_id])
+        payload = {
+            "bbox": [
+                -9072629.904175375,
+                -9043966.018568434,
+                1491839.8773032012,
+                1507127.2829602365
+            ],
+            "srid": "EPSG:3857"
+        }
+        response = self.client.post(url, data=payload, format='json')
+
+        expected = {
+            "message": f"Resource selected with id {dataset_id} does not exists"
+        }
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(expected, response.json())
+
+    def test_set_thumbnail_from_bbox_from_logged_user_for_existing_doc(self):
+        """
+        Given a logged User and an existing doc, should raise a NotImplemented.
+        """
+        # Admin
+        self.client.login(username="admin", password="admin")
+        dataset_id = Document.objects.first().resourcebase_ptr_id
+        url = reverse('base-resources-set-thumb-from-bbox', args=[dataset_id])
+        payload = {
+            "bbox": [],
+            "srid": "EPSG:3857"
+        }
+        response = self.client.post(url, data=payload, format='json')
+
+        expected = {
+            "message": "Not implemented: Endpoint available only for Dataset and Maps"
+        }
+        self.assertEqual(response.status_code, 405)
+        self.assertEqual(expected, response.json())
+
+    @patch("geonode.base.api.views.create_thumbnail", side_effect=ThumbnailError('Some exception during thumb creation'))
+    def test_set_thumbnail_from_bbox_from_logged_user_for_existing_dataset_raise_exp(self, mock_exp):
+        """
+        Given a logged User and an existing dataset, should raise a ThumbnailException.
+        """
+        # Admin
+        self.client.login(username="admin", password="admin")
+        dataset_id = Layer.objects.first().resourcebase_ptr_id
+        url = reverse('base-resources-set-thumb-from-bbox', args=[dataset_id])
+        payload = {
+            "bbox": [],
+            "srid": "EPSG:3857"
+        }
+        response = self.client.post(url, data=payload, format='json')
+
+        expected = {
+            "message": "Some exception during thumb creation"
+        }
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(expected, response.json())

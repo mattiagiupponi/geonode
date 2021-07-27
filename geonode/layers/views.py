@@ -53,16 +53,14 @@ from django.forms.models import inlineformset_factory
 from django.template.response import TemplateResponse
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, HttpResponseRedirect
-from django.views.decorators.http import require_http_methods
 from django.views.decorators.clickjacking import xframe_options_exempt
 
 from guardian.shortcuts import get_objects_for_user
 
 from geonode import geoserver
-from geonode.thumbs.thumbnails import create_thumbnail
 from geonode.base.auth import get_or_create_token
 from geonode.base.forms import CategoryForm, TKeywordForm, BatchPermissionsForm, ThesaurusAvailableForm
-from geonode.base.views import batch_modify
+from geonode.base.views import batch_modify, get_url_for_model
 from geonode.base.models import (
     Thesaurus,
     TopicCategory)
@@ -89,7 +87,7 @@ from geonode.monitoring import register_event
 from geonode.monitoring.models import EventType
 from geonode.groups.models import GroupProfile
 from geonode.security.views import _perms_info_json
-from geonode.people.forms import ProfileForm, PocForm
+from geonode.people.forms import ProfileForm
 from geonode.documents.models import get_related_documents
 from geonode.security.utils import get_visible_resources, set_geowebcache_invalidate_cache
 from geonode.utils import (
@@ -1208,27 +1206,6 @@ def layer_metadata_advanced(request, layername):
 
 
 @login_required
-def layer_change_poc(request, ids, template='layers/layer_change_poc.html'):
-    layers = Layer.objects.filter(id__in=ids.split('_'))
-
-    if request.method == 'POST':
-        form = PocForm(request.POST)
-        if form.is_valid():
-            for layer in layers:
-                layer.poc = form.cleaned_data['contact']
-                layer.save()
-
-            # Process the data in form.cleaned_data
-            # ...
-            # Redirect after POST
-            return HttpResponseRedirect('/admin/maps/layer')
-    else:
-        form = PocForm()  # An unbound form
-    return render(
-        request, template, context={'layers': layers, 'form': form})
-
-
-@login_required
 def layer_replace(request, layername, template='layers/layer_replace.html'):
     try:
         layer = _resolve_layer(
@@ -1498,40 +1475,6 @@ def layer_granule_remove(
         return HttpResponse("Not allowed", status=403)
 
 
-@require_http_methods(["POST"])
-def layer_thumbnail(request, layername):
-    try:
-        layer_obj = _resolve_layer(request, layername)
-    except PermissionDenied:
-        return HttpResponse(_("Not allowed"), status=403)
-    except Exception:
-        raise Http404(_("Not found"))
-    if not layer_obj:
-        raise Http404(_("Not found"))
-
-    try:
-        request_body = json.loads(request.body)
-        bbox = request_body['bbox'] + [request_body['srid']]
-        zoom = request_body.get('zoom', None)
-
-        create_thumbnail(
-            layer_obj,
-            bbox=bbox,
-            background_zoom=zoom,
-            overwrite=True
-        )
-
-        return HttpResponse('Thumbnail saved')
-
-    except Exception as e:
-        logger.exception(e)
-        return HttpResponse(
-            content=_('couldn\'t generate thumbnail: %s' % str(e)),
-            status=500,
-            content_type='text/plain'
-        )
-
-
 def get_layer(request, layername):
     """Get Layer object as JSON"""
 
@@ -1694,7 +1637,7 @@ def batch_permissions(request, model):
 
     if "cancel" in request.POST or not ids:
         return HttpResponseRedirect(
-            f'/admin/{model.lower()}s/{model.lower()}/'
+            get_url_for_model(model)
         )
 
     if request.method == 'POST':
@@ -1729,7 +1672,7 @@ def batch_permissions(request, model):
                 except set_permissions.OperationalError as exc:
                     celery_logger.exception('Sending task raised: %r', exc)
             return HttpResponseRedirect(
-                f'/admin/{model.lower()}s/{model.lower()}/'
+                get_url_for_model(model)
             )
         return render(
             request,

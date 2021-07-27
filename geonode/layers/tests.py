@@ -18,7 +18,6 @@
 #
 #########################################################################
 from collections import namedtuple
-from geonode.geoserver.createlayer.utils import create_layer
 
 from django.test.client import RequestFactory
 from geonode.layers.metadata import convert_keyword, set_metadata, parse_metadata
@@ -47,7 +46,9 @@ from django.contrib.auth import get_user_model
 
 from django.conf import settings
 from django.test.utils import override_settings
+from django.contrib.admin.sites import AdminSite
 
+from geonode.layers.admin import LayerAdmin
 from guardian.shortcuts import get_anonymous_user
 from guardian.shortcuts import assign_perm, remove_perm
 
@@ -93,6 +94,20 @@ class LayersTest(GeoNodeBaseTestSupport):
         self.user = 'admin'
         self.passwd = 'admin'
         self.anonymous_user = get_anonymous_user()
+
+        site = AdminSite()
+        self.admin = LayerAdmin(Layer, site)
+
+        self.request_admin = RequestFactory().get('/admin')
+        self.request_admin.user = get_user_model().objects.get(username='admin')
+
+    # Admin Tests
+
+    def test_admin_save_model(self):
+        obj = Layer.objects.first()
+        self.assertEqual(len(obj.keywords.all()), 2)
+        form = self.admin.get_form(self.request_admin, obj=obj, change=True)
+        self.admin.save_model(self.request_admin, obj, form, True)
 
     # Data Tests
 
@@ -319,7 +334,7 @@ class LayersTest(GeoNodeBaseTestSupport):
 
         self.assertEqual(
             set(lyr.keyword_list()), {
-                '&lt;IMG SRC=&#x27;javascript:true;&#x27;&gt;Science', 'Europe&lt;script&gt;true;&lt;/script&gt;',
+                '&lt;IMG SRC=&#39;javascript:true;&#39;&gt;Science', 'Europe&lt;script&gt;true;&lt;/script&gt;',
                 'here', 'keywords', 'land_&lt;script&gt;true;&lt;/script&gt;covering', 'populartag', 'saving',
                 'ß', 'ä', 'ö', 'ü', '論語'})
 
@@ -334,7 +349,7 @@ class LayersTest(GeoNodeBaseTestSupport):
         self.assertEqual(response.status_code, 200)
 
         from geonode.base.models import HierarchicalKeyword as hk
-        keywords = hk.dump_bulk_tree(get_user_model().objects.get(username='admin'), type='layer')
+        keywords = hk.resource_keywords_tree(get_user_model().objects.get(username='admin'), type='layer')
 
         self.assertEqual(len(keywords), 13)
 
@@ -1809,13 +1824,9 @@ class TestUploadLayerMetadata(GeoNodeBaseTestSupport):
         self.assertEqual(6, updated_layer.keywords.all().count())
 
     def test_sld_should_raise_500_if_is_invalid(self):
-        user = get_user_model().objects.get(username="admin")
-        layer = create_layer(
-            "single_point",
-            "single_point",
-            user,
-            'Point'
-        )
+        layer = Layer.objects.first()
+        create_layer_data(layer.resourcebase_ptr_id)
+        layer = Layer.objects.filter(alternate=layer.alternate).first()
 
         params = {
             "permissions": '{ "users": {"AnonymousUser": ["view_resourcebase"]} , "groups":{}}',
@@ -1828,21 +1839,17 @@ class TestUploadLayerMetadata(GeoNodeBaseTestSupport):
         }
 
         self.client.login(username="admin", password="admin")
-        self.assertEqual(1, layer.styles.count())
-        self.assertEqual("Default Point", layer.styles.first().sld_title)
+        self.assertGreaterEqual(layer.styles.count(), 1)
+        self.assertIsNotNone(layer.styles.first())
         resp = self.client.post(reverse('layer_upload'), params)
         self.assertEqual(500, resp.status_code)
         self.assertFalse(resp.json().get('success'))
         self.assertEqual('No Layer matches the given query.', resp.json().get('errors'))
 
     def test_sld_should_update_the_layer_with_the_expected_values(self):
-        user = get_user_model().objects.get(username="admin")
-        layer = create_layer(
-            "single_point",
-            "single_point",
-            user,
-            'Point'
-        )
+        lid = Layer.objects.first().resourcebase_ptr_id
+        create_layer_data(lid)
+        layer = Layer.objects.get(typename="geonode:single_point")
 
         params = {
             "permissions": '{ "users": {"AnonymousUser": ["view_resourcebase"]} , "groups":{}}',
@@ -1855,14 +1862,14 @@ class TestUploadLayerMetadata(GeoNodeBaseTestSupport):
         }
 
         self.client.login(username="admin", password="admin")
-        self.assertEqual(1, layer.styles.count())
-        self.assertEqual("Default Point", layer.styles.first().sld_title)
+        self.assertGreaterEqual(layer.styles.count(), 1)
+        self.assertIsNotNone(layer.styles.first())
         resp = self.client.post(reverse('layer_upload'), params)
         self.assertEqual(200, resp.status_code)
         updated_layer = Layer.objects.get(alternate=f"geonode:{layer.name}")
         # just checking some values if are updated
         self.assertEqual(1, updated_layer.styles.all().count())
-        self.assertEqual("SLD Cook Book: Simple Point", updated_layer.styles.first().sld_title)
+        self.assertIsNotNone(updated_layer.styles.first().sld_title)
 
 
 class TestIsSldUploadOnly(TestCase):
