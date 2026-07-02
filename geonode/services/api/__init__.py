@@ -1,6 +1,6 @@
 #########################################################################
 #
-# Copyright (C) 2017 OSGeo
+# Copyright (C) 2024 OSGeo
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,9 +16,3 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 #########################################################################
-
-from django.urls import include, re_path
-
-urlpatterns = [
-    re_path(r"^", include("geonode.services.api.urls")),
-]
