@@ -176,8 +176,9 @@ class ServiceViewSet(DynamicModelViewSet):
                 if service.harvester.latest_harvesting_session:
                     service.harvester.latest_harvesting_session.delete()
                 service.harvester.initiate_update_harvestable_resources()
-        except Exception as e:
-            return Response({"detail": str(e)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        except Exception:
+            logger.exception("Failed to rescan service", extra={"service_id": service.pk})
+            return Response({"detail": "Unable to rescan service at the moment."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         return Response({"detail": "Service rescanned successfully"})
 
     @action(detail=True, methods=["get"])
