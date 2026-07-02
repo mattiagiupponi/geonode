@@ -135,8 +135,9 @@ class CreateServiceSerializer(serializers.Serializer):
         service = service_handler.create_geonode_service(owner=owner)
         try:
             service.full_clean()
-        except DjangoValidationError as e:
-            raise ValidationError(str(e))
+        except DjangoValidationError:
+            logger.exception("Service validation failed during creation.")
+            raise ValidationError(_("Unable to validate and save service."))
         service.save()
         service.keywords.add(*service_handler.get_keywords())
 
